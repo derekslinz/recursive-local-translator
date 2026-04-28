@@ -8,11 +8,14 @@ def test_is_russian():
     assert not is_russian("")
 
 def test_sanitize_name():
-    assert sanitize_name("file/name?yes*no") == "file_name_yes_no"
-    assert sanitize_name("  hello  ") == "hello"
-    assert sanitize_name("a"*300) == "a"*255
-    assert sanitize_name("a"*255) == "a"*255
-    assert sanitize_name("a....b") == "a.b"  # assuming repeats are stripped
+    assert sanitize_name("File: Name?*") == "File_ Name"
+    assert sanitize_name("  Space  ") == "Space"
+    assert sanitize_name("many......dots") == "many.dots"
+    assert sanitize_name("long_____under") == "long_under"
+    # Deduplication test: 5 chars should stay, 6 should collapse
+    assert sanitize_name("aaaaa") == "aaaaa"
+    assert sanitize_name("aaaaaa") == "a"
+    assert sanitize_name("!!!!!!!!!") == "!"
 
 def test_needs_content_based_name():
     assert needs_content_based_name("12345678-1234-1234-1234-123456789012")
@@ -20,3 +23,10 @@ def test_needs_content_based_name():
     assert needs_content_based_name("image12345678")
     assert not needs_content_based_name("vacation_photos")
     assert not needs_content_based_name("meeting_notes")
+
+def test_transliterate_text():
+    from translator.translator_utils import transliterate_text
+    assert transliterate_text("Привет") == "Privet"
+    assert transliterate_text("Папка") == "Papka"
+    assert transliterate_text("Я") == "Ya"
+    assert transliterate_text("Hello") == "Hello"

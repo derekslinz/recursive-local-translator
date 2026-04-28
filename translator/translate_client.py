@@ -27,10 +27,12 @@ class DirectTranslateClient:
         pkg_path: str = "",
         source_lang: str = "ru",
         target_lang: str = "en",
+        transliterate_only: bool = False,
     ):
         self.device = device
         self.source_lang = source_lang
         self.target_lang = target_lang
+        self.transliterate_only = transliterate_only
         self._translator = None
         self._sp = None
 
@@ -64,6 +66,8 @@ class DirectTranslateClient:
 
     def ensure_ready(self, max_wait_s: int = 120):
         """Load the CTranslate2 model and SentencePiece tokenizer."""
+        if self.transliterate_only:
+            return
         if self._translator is not None:
             return
 
@@ -137,10 +141,15 @@ class DirectTranslateClient:
         target_lang: str = "en",
         retry: int = 3,
     ) -> str:
-        """Translate text using CTranslate2 + SentencePiece."""
+        """Translate text using CTranslate2 + SentencePiece or transliterate."""
         text = text.encode("utf-8", "surrogateescape").decode("utf-8", "ignore")
         if not text or not text.strip():
             return text
+
+        if self.transliterate_only:
+            from .translator_utils import transliterate_text
+
+            return transliterate_text(text)
 
         with self._db_lock:
             cur = self.db.execute(

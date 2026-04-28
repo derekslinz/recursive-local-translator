@@ -19,7 +19,7 @@ CYRILLIC_RE = re.compile(r"[а-яА-ЯёЁ]")
 GENERIC_TITLE_RE = re.compile(
     r"^(?:document|file|scan|image|note|untitled|new\s+file|"
     r"page|report|log|result|data|export|copy|doc|"
-    r"presentation|slide|sheet|book)(?:\b|$)",
+    r"presentation|slide|sheet|book)",
     re.IGNORECASE,
 )
 
@@ -31,6 +31,88 @@ def is_russian(s: str) -> bool:
     # Sanitize surrogates to prevent UnicodeEncodeError in regex/json
     s = s.encode("utf-8", "surrogateescape").decode("utf-8", "ignore")
     return bool(CYRILLIC_RE.search(s))
+
+
+def transliterate_text(text: str) -> str:
+    """Transliterate Cyrillic text to Latin using anyascii."""
+    if not text:
+        return text
+    try:
+        from anyascii import anyascii
+
+        return anyascii(text)
+    except ImportError:
+        # Fallback to a very basic mapping if anyascii is not installed
+        # This is not comprehensive but handles basic Russian
+        ru_map = {
+            "а": "a",
+            "б": "b",
+            "в": "v",
+            "г": "g",
+            "д": "d",
+            "е": "e",
+            "ё": "yo",
+            "ж": "zh",
+            "з": "z",
+            "и": "i",
+            "й": "y",
+            "к": "k",
+            "л": "l",
+            "м": "m",
+            "н": "n",
+            "о": "o",
+            "п": "p",
+            "р": "r",
+            "с": "s",
+            "т": "t",
+            "у": "u",
+            "ф": "f",
+            "х": "kh",
+            "ц": "ts",
+            "ч": "ch",
+            "ш": "sh",
+            "щ": "shch",
+            "ъ": "",
+            "ы": "y",
+            "ь": "",
+            "э": "e",
+            "ю": "yu",
+            "я": "ya",
+            "А": "A",
+            "Б": "B",
+            "В": "V",
+            "Г": "G",
+            "Д": "D",
+            "Е": "E",
+            "Ё": "Yo",
+            "Ж": "Zh",
+            "З": "Z",
+            "И": "I",
+            "Й": "Y",
+            "К": "K",
+            "Л": "L",
+            "М": "M",
+            "Н": "N",
+            "О": "O",
+            "П": "P",
+            "Р": "R",
+            "С": "S",
+            "Т": "T",
+            "У": "U",
+            "Ф": "F",
+            "Х": "Kh",
+            "Ц": "Ts",
+            "Ч": "Ch",
+            "Ш": "Sh",
+            "Щ": "Shch",
+            "Ъ": "",
+            "Ы": "Y",
+            "Ь": "",
+            "Э": "E",
+            "Ю": "Yu",
+            "Я": "Ya",
+        }
+        return "".join(ru_map.get(c, c) for c in text)
 
 
 def detect_language(text: str) -> str:
@@ -49,15 +131,19 @@ def detect_language(text: str) -> str:
 
 def sanitize_name(name: str) -> str:
     """Remove invalid characters and collapse excessive repetitions."""
-    # Remove invalid filesystem characters
-    name = re.sub(r'[<>:"/\\|?*]', "", name)
+    # Replace invalid filesystem characters with underscores
+    name = re.sub(r'[<>:"/\\|?*]', "_", name)
     # Collapse whitespace
-    name = re.sub(r"\s+", " ", name).strip()
-    # Collapse repeating characters (e.g., __________ -> _)
-    name = re.sub(r"(.)\1{4,}", r"\1", name)
+    name = re.sub(r"\s+", " ", name)
+    # Collapse repeating underscores and dots
+    name = re.sub(r"_+", "_", name)
+    name = re.sub(r"\.+", ".", name)
+    name = name.strip(" ._")
+    # Collapse repeating characters (e.g., more than 5 consecutive characters -> single character)
+    name = re.sub(r"(.)\1{5,}", r"\1", name)
     if len(name) > 255:
         name = name[:255].rstrip()
-    return name
+    return name or "unnamed"
 
 
 def split_suffixes(name: str) -> Tuple[str, str]:
@@ -80,6 +166,9 @@ def needs_content_based_name(stem: str) -> bool:
     if lower.isdigit():
         return True
     if len(clean) <= 2:
+        return True
+    # Detect UUIDs and long alphanumeric hashes (often used for scans/exports)
+    if len(clean) >= 20 and re.match(r"^[a-zA-Z0-9\-_]+$", clean):
         return True
     if GENERIC_TITLE_RE.match(lower):
         return True

@@ -8,9 +8,16 @@ class MockClient:
     def __init__(self, source_lang="ru", target_lang="en"):
         self.source_lang = source_lang
         self.target_lang = target_lang
+        self.mapping = {
+            "Привет": "Hello",
+            "мир": "world",
+            "Папка": "Folder",
+            "Иван": "Ivan",
+            "Описание": "Description"
+        }
 
     def translate(self, text):
-        return f"EN_{text}"
+        return self.mapping.get(text, f"TR_{text}")
 
 def test_json_translation(tmp_path):
     lock = threading.RLock()
@@ -23,9 +30,9 @@ def test_json_translation(tmp_path):
     assert handler.translate_json_inplace(json_path)
     
     new_data = json.loads(json_path.read_text())
-    assert new_data["key"] == "EN_Привет"
-    assert new_data["nested"][0] == "EN_мир"
-    assert new_data["nested"][1] == "hello"  # Not russian
+    assert new_data["key"] == "Hello"
+    assert new_data["nested"][0] == "world"
+    assert new_data["nested"][1] == "hello"
 
 def test_csv_translation(tmp_path):
     lock = threading.RLock()
@@ -42,6 +49,6 @@ def test_csv_translation(tmp_path):
     
     with csv_path.open("r", encoding="utf-8", newline="") as f:
         reader = list(csv.reader(f))
-        assert reader[1][1] == "EN_Иван"
-        assert reader[1][2] == "EN_Описание"
+        assert reader[1][1] == "Ivan"
+        assert reader[1][2] == "Description"
         assert reader[2][1] == "John"

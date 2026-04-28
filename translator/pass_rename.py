@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from .translator_utils import (
     is_russian,

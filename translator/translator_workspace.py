@@ -29,11 +29,13 @@ class WorkspaceRUENTranslator:
         self.target_lang = kwargs.get("target_lang", "en")
         self.auto_detect = kwargs.get("auto_detect", False)
 
+        self.transliterate = kwargs.get("transliterate", False)
         self.client = DirectTranslateClient(
             cache_file=kwargs.get("cache_file", ".translation_cache.db"),
             device=kwargs.get("device", "auto"),
             source_lang=self.source_lang,
             target_lang=self.target_lang,
+            transliterate_only=self.transliterate,
         )
         self.rename_only = kwargs.get("rename_only", False)
         self.upgrade_only = kwargs.get("upgrade_only", False)
@@ -74,6 +76,7 @@ class WorkspaceRUENTranslator:
             ".po",
             ".pot",
             ".tex",
+            ".jsonl",
         }
         self.image_extensions = {".png", ".jpg", ".jpeg", ".tiff", ".bmp"}
 
@@ -153,7 +156,7 @@ class WorkspaceRUENTranslator:
         try:
             path.rename(new_path)
             self._stats_inc("files_content_renamed")
-            print(f"    ➜ Renamed via content: {new_path.name}")
+            print(f"    [Renamed via content]: {new_path.name}")
         except OSError:
             pass
 
@@ -212,12 +215,13 @@ class WorkspaceRUENTranslator:
         with self._lock:
             # Create a new client for the new language pair
             # In a production setting, we might want to cache clients
-            print(f"  ℹ Switching language model: {source} → {self.target_lang}")
+            print(f"  INFO: Switching language model: {source} -> {self.target_lang}")
             self.client = DirectTranslateClient(
                 cache_file=self.client.cache_file,
                 device=self.client.device,
                 source_lang=source,
                 target_lang=self.target_lang,
+                transliterate_only=self.transliterate,
             )
             self.client.ensure_ready()
             # Update handlers with new client

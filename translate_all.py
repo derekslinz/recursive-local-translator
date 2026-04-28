@@ -10,7 +10,7 @@ Capabilities:
     - Data: .csv, .json
     - Office: .docx, .xlsx, .pptx
 - Sidecar extracts (.en.txt) for: .pdf, .vsd, .vsdx, and images (via OCR).
-- Features: Language autodetection, manual source/target overrides, pass-specific execution.
+- Features: Language autodetection, manual source/target overrides, pass-specific execution, transliteration mode.
 - Excludes: .ini files to protect system configurations.
 """
 
@@ -29,56 +29,85 @@ def main():
         sys.stderr.reconfigure(errors="backslashreplace")
 
     parser = argparse.ArgumentParser(
-        description="Translate Russian workspace to English."
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Execution Passes:
+  1. Renaming: Recursively renames directories and files using the translator or transliterator.
+  2. Upgrading: Converts legacy Office formats (.doc, .xls, .ppt, .rtf, .odt) to modern OpenXML.
+  3. Content: Translates supported text, data, and office content in-place.
+  4. Sidecars: Generates .en.txt extracts for PDF and Image files using OCR fallbacks.
+
+Examples:
+  Translate current workspace using CUDA:
+    python3 translate_all.py . --device cuda
+
+  Only rename files/folders in current directory (transliteration mode):
+    python3 translate_all.py . --rename-only --transliterate
+
+  Process specific directory with 10 threads and OCR sidecars:
+    python3 translate_all.py /my/data --workers 10 --sidecars
+        """,
     )
     parser.add_argument(
         "root_path",
-        nargs="?",
-        default=".",
-        help="Root path to process (default: current directory)",
+        help="Target directory to process recursively",
     )
     parser.add_argument(
-        "--sidecars", action="store_true", help="Write sidecar files for PDFs/images"
+        "--sidecars",
+        action="store_true",
+        help="Generate sidecar .en.txt files for PDFs and images instead of in-place translation",
     )
     parser.add_argument(
-        "--workers", type=int, default=5, help="Number of concurrent workers"
+        "--workers",
+        type=int,
+        default=5,
+        help="Max concurrent threads for translation (default: 5)",
     )
     parser.add_argument(
         "--cache-file",
         type=str,
         default=".translation_cache.db",
-        help="Path to translation cache",
+        help="SQLite database for persistent translation caching (default: .translation_cache.db)",
     )
     parser.add_argument(
         "--device",
         type=str,
         default="auto",
         choices=["auto", "cuda", "cpu", "mps"],
-        help="Device for inference (default: auto)",
+        help="Hardware accelerator to use (typically auto-detected). Options: 'cuda' (NVIDIA), 'mps' (Apple), 'cpu', or 'auto'",
     )
     parser.add_argument(
         "--source-lang",
         type=str,
         default="ru",
-        help="Default source language (default: ru)",
+        help="Base source language code (default: 'ru')",
     )
     parser.add_argument(
-        "--target-lang", type=str, default="en", help="Target language (default: en)"
+        "--target-lang",
+        type=str,
+        default="en",
+        help="Desired target language code (default: 'en')",
     )
     parser.add_argument(
         "--auto-detect",
         action="store_true",
-        help="Automatically detect source language per file/folder",
+        help="Enable per-file language detection (useful for mixed-language workspaces)",
     )
     parser.add_argument(
         "--rename-only",
         action="store_true",
-        help="Only execute the file/folder rename pass",
+        help="Skip content translation and only execute the file/folder rename pass",
     )
     parser.add_argument(
         "--upgrade-only",
         action="store_true",
-        help="Only execute the file format upgrade pass",
+        help="Skip all translation and only convert legacy Office formats to modern ones",
+    )
+    parser.add_argument(
+        "--transliterate",
+        action="store_true",
+        help="Convert Cyrillic to Latin script without semantic translation (extremely fast)",
     )
 
     args = parser.parse_args()
@@ -95,6 +124,7 @@ def main():
             auto_detect=args.auto_detect,
             rename_only=args.rename_only,
             upgrade_only=args.upgrade_only,
+            transliterate=args.transliterate,
         )
         tr.run()
     except KeyboardInterrupt:
