@@ -91,10 +91,10 @@ def main():
         )
         tr.run()
     except KeyboardInterrupt:
-        print("\n⚠ Translation interrupted by user")
+        print("\nWarning: Translation interrupted by user")
         sys.exit(1)
     except Exception as e:
-        print(f"\n✗ Fatal error: {e}")
+        print(f"\nError: Fatal error: {e}")
         traceback.print_exc()
         sys.exit(1)
 
