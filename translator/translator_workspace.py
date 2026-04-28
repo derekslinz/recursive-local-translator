@@ -2,7 +2,7 @@ import os
 import threading
 import time
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
 from .translate_client import DirectTranslateClient
 from .translator_utils import (
@@ -11,7 +11,6 @@ from .translator_utils import (
     needs_content_based_name,
     safe_exists,
     safe_is_file,
-    safe_is_dir,
     detect_language,
 )
 from .handlers_text import TextHandler
@@ -346,11 +345,12 @@ class WorkspaceRUENTranslator:
                 if safe_is_file(p)
                 and p.suffix.lower() in {".doc", ".xls", ".ppt", ".rtf", ".odt"}
             ]
-            upgraded = sum(
-                1
-                for p in legacy
-                if self.office_handler.upgrade_office_file(p, self._unique_path) != p
-            )
+            upgraded = 0
+            for p in legacy:
+                new_path = self.office_handler.upgrade_office_file(p, self._unique_path)
+                if new_path != p:
+                    upgraded += 1
+                    print(f"  Success: Upgraded file: {p.name} → {new_path.name}")
             print(f"  Success: Upgraded {upgraded} legacy files")
         if not self.rename_only and not self.upgrade_only:
             print("\nPASS 3: Content...")

@@ -58,10 +58,14 @@ def test_eml_translates_body_and_base64_text_attachment(tmp_path):
 
     parts = [p for p in parsed.walk() if not p.is_multipart()]
     body_part = next(p for p in parts if p.get_content_disposition() is None)
-    assert "Hello body" in body_part.get_payload(decode=True).decode("utf-8", errors="ignore")
+    assert "Hello body" in body_part.get_payload(decode=True).decode(
+        "utf-8", errors="ignore"
+    )
 
     text_attach = next(p for p in parts if p.get_filename() == "notes.txt")
-    text_attach_payload = text_attach.get_payload(decode=True).decode("utf-8", errors="ignore")
+    text_attach_payload = text_attach.get_payload(decode=True).decode(
+        "utf-8", errors="ignore"
+    )
     assert "Hello attachment" in text_attach_payload
 
     binary_attach = next(p for p in parts if p.get_filename() == "blob.bin")

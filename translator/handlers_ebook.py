@@ -46,7 +46,9 @@ class EbookHandler(BaseHandler):
         try:
             with zipfile.ZipFile(path, "w") as out:
                 # EPUB spec: mimetype must be first and stored (no compression)
-                mimetype_entry = next((pair for pair in files if pair[0].filename == "mimetype"), None)
+                mimetype_entry = next(
+                    (pair for pair in files if pair[0].filename == "mimetype"), None
+                )
                 if mimetype_entry:
                     info, data = mimetype_entry
                     mime_info = zipfile.ZipInfo("mimetype")
@@ -93,7 +95,11 @@ class EbookHandler(BaseHandler):
             href = item.attrib.get("href")
             if not href:
                 continue
-            if media_type in {"application/xhtml+xml", "text/html", "application/x-dtbncx+xml"}:
+            if media_type in {
+                "application/xhtml+xml",
+                "text/html",
+                "application/x-dtbncx+xml",
+            }:
                 docs.append(str((Path(base) / href).as_posix()))
         return docs
 

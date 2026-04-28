@@ -6,7 +6,7 @@ import zipfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Callable
-from .translator_utils import is_russian, safe_exists
+from .translator_utils import safe_exists
 from .handlers_base import BaseHandler
 
 try:

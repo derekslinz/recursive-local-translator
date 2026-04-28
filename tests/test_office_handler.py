@@ -1,4 +1,3 @@
-import io
 import threading
 import zipfile
 

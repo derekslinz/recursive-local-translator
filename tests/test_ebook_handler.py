@@ -37,7 +37,9 @@ def test_translate_epub_inplace(tmp_path):
 <html xmlns=\"http://www.w3.org/1999/xhtml\"><body><p>Привет книга</p></body></html>"""
 
     with zipfile.ZipFile(path, "w") as zf:
-        zf.writestr("mimetype", "application/epub+zip", compress_type=zipfile.ZIP_STORED)
+        zf.writestr(
+            "mimetype", "application/epub+zip", compress_type=zipfile.ZIP_STORED
+        )
         zf.writestr("META-INF/container.xml", container_xml)
         zf.writestr("OEBPS/content.opf", opf_xml)
         zf.writestr("OEBPS/chapter1.xhtml", chapter)

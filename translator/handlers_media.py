@@ -3,7 +3,6 @@ import tempfile
 import shutil
 from pathlib import Path
 from typing import Optional
-from .translator_utils import is_russian
 from .handlers_base import BaseHandler
 
 try:
