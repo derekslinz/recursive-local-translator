@@ -2,7 +2,7 @@ import os
 import threading
 import time
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
 from .translate_client import DirectTranslateClient
 from .translator_utils import (
@@ -11,12 +11,13 @@ from .translator_utils import (
     needs_content_based_name,
     safe_exists,
     safe_is_file,
-    safe_is_dir,
     detect_language,
 )
 from .handlers_text import TextHandler
 from .handlers_office import OfficeHandler
 from .handlers_media import MediaHandler
+from .handlers_email import EmailHandler
+from .handlers_ebook import EbookHandler
 from .pass_rename import RenameProcessor
 
 
@@ -77,12 +78,18 @@ class WorkspaceRUENTranslator:
             ".pot",
             ".tex",
             ".jsonl",
+            ".lrc",
+            ".info",
+            ".textile",
+            ".strings",
         }
         self.image_extensions = {".png", ".jpg", ".jpeg", ".tiff", ".bmp"}
 
         self.text_handler = TextHandler(self.client, self._lock)
         self.office_handler = OfficeHandler(self.client, self._lock)
         self.media_handler = MediaHandler(self.client, self._lock)
+        self.email_handler = EmailHandler(self.client, self._lock)
+        self.ebook_handler = EbookHandler(self.client, self._lock)
         self.rename_proc = RenameProcessor(
             self.client,
             self._lock,
@@ -228,7 +235,25 @@ class WorkspaceRUENTranslator:
             self.text_handler.client = self.client
             self.office_handler.client = self.client
             self.media_handler.client = self.client
+            self.email_handler.client = self.client
+            self.ebook_handler.client = self.client
             self.rename_proc.client = self.client
+
+    def _is_qt_ts_file(self, path: Path) -> bool:
+        try:
+            head = path.read_text(encoding="utf-8", errors="ignore")[:1024].lower().lstrip()
+        except Exception:
+            return False
+
+        if head.startswith("<?xml"):
+            decl_end = head.find("?>")
+            if decl_end == -1:
+                return False
+            head = head[decl_end + 2 :].lstrip()
+
+        return head.startswith("<ts") and (
+            len(head) == 3 or head[3].isspace() or head[3] == ">"
+        )
 
     def _process_content_for_file(self, path: Path) -> None:
         if not safe_is_file(path):
@@ -251,14 +276,28 @@ class WorkspaceRUENTranslator:
             ok, t = self.text_handler.translate_csv_inplace(path), "csv/tsv"
         elif s == ".json":
             ok, t = self.text_handler.translate_json_inplace(path), "json"
+        elif s == ".arb":
+            ok, t = self.text_handler.translate_json_inplace(path), "arb"
+        elif s == ".fb2":
+            ok, t = self.text_handler.translate_fb2_inplace(path), "fb2"
+        elif s == ".ts" and self._is_qt_ts_file(path):
+            ok, t = self.text_handler.translate_xml_inplace(path), "qt-ts"
+        elif s in {".resx", ".xliff", ".xlf", ".tmx", ".svg"}:
+            ok, t = self.text_handler.translate_xml_inplace(path), "xml"
         elif s == ".docx":
             ok, t = self.office_handler.translate_docx_inplace(path), "docx"
         elif s == ".xlsx":
             ok, t = self.office_handler.translate_xlsx_inplace(path), "xlsx"
         elif s == ".pptx":
             ok, t = self.office_handler.translate_pptx_inplace(path), "pptx"
+        elif s in {".ods", ".odp", ".odt"}:
+            ok, t = self.office_handler.translate_odf_inplace(path), "odf"
+        elif s == ".eml":
+            ok, t = self.email_handler.translate_eml_inplace(path), "eml"
+        elif s == ".epub":
+            ok, t = self.ebook_handler.translate_epub_inplace(path), "epub"
         elif self.translate_extract_sidecars and s in (
-            {".pdf", ".vsd", ".vsdx"} | self.image_extensions
+            {".pdf", ".vsd", ".vsdx", ".msg", ".djvu"} | self.image_extensions
         ):
             self._process_sidecar(path, s)
             return
@@ -277,6 +316,10 @@ class WorkspaceRUENTranslator:
                 text = self.media_handler.extract_pdf_ocr_text(path)
         elif suf in (".vsd", ".vsdx"):
             text = self.media_handler.extract_vsd_text(path)
+        elif suf == ".msg":
+            text = self.media_handler.extract_msg_text(path)
+        elif suf == ".djvu":
+            text = self.media_handler.extract_djvu_text(path)
         elif suf in self.image_extensions:
             text = self.media_handler.extract_ocr_text(path)
         if text and is_russian(text):
@@ -306,11 +349,12 @@ class WorkspaceRUENTranslator:
                 if safe_is_file(p)
                 and p.suffix.lower() in {".doc", ".xls", ".ppt", ".rtf", ".odt"}
             ]
-            upgraded = sum(
-                1
-                for p in legacy
-                if self.office_handler.upgrade_office_file(p, self._unique_path) != p
-            )
+            upgraded = 0
+            for p in legacy:
+                new_path = self.office_handler.upgrade_office_file(p, self._unique_path)
+                if new_path != p:
+                    upgraded += 1
+                    print(f"  Success: Upgraded file: {p.name} → {new_path.name}")
             print(f"  Success: Upgraded {upgraded} legacy files")
         if not self.rename_only and not self.upgrade_only:
             print("\nPASS 3: Content...")

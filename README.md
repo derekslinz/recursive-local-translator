@@ -18,10 +18,13 @@ The tool operates in three distinct phases to ensure consistency and safety:
 | Category | Supported Extensions |
 | :--- | :--- |
 | **Documentation** | `.txt`, `.log`, `.nfo`, `.md`, `.mdx`, `.rmd`, `.rst`, `.adoc`, `.org`, `.wiki`, `.rtx`, `.tex` |
-| **Config / Web** | `.cfg`, `.conf`, `.toml`, `.properties`, `.mak`, `.cmake`, `.yaml`, `.yml`, `.xml`, `.html`, `.htm`, `.xhtml`, `.shtml`, `.json`, `.json5`, `.jsonc`, `.jsonl` |
+| **Config / Web** | `.cfg`, `.conf`, `.toml`, `.properties`, `.mak`, `.cmake`, `.yaml`, `.yml`, `.xml`, `.html`, `.htm`, `.xhtml`, `.shtml`, `.json`, `.json5`, `.jsonc`, `.jsonl`, `.svg`, `.resx`, `.xliff`, `.xlf`, `.tmx` |
 | **Subtitles** | `.srt`, `.vtt`, `.ass`, `.ssa`, `.sub`, `.sbv`, `.po`, `.pot` |
+| **Additional Text** | `.lrc`, `.info`, `.textile`, `.strings`, `.arb`, `.fb2`, `.ts` (Qt XML autodetected only) |
 | **Office** | `.docx`, `.xlsx`, `.pptx` (formatting preserved) |
-| **Sidecars** | `.pdf`, `.vsd`, `.vsdx`, `.png`, `.jpg`, `.jpeg`, `.tiff`, `.bmp` (generates `.en.txt`) |
+| **OpenDocument** | `.odt`, `.ods`, `.odp` (native in-place translation) |
+| **Email / Ebook** | `.eml` (subject/body + Base64 text-like attachments), `.epub` |
+| **Sidecars** | `.pdf`, `.vsd`, `.vsdx`, `.msg`, `.djvu`, `.png`, `.jpg`, `.jpeg`, `.tiff`, `.bmp` (generates `.en.txt`) |
 
 ### 3. Intelligent Content Handling
 - **Mixed Language Support**: Automatically detects language per paragraph/chunk. English text within a Russian document is preserved untouched.
@@ -97,6 +100,12 @@ python3 translate_all.py /path/to/workspace
 To ensure maximum extraction success, the tool uses a cascading fallback strategy:
 - **PDF Extraction**: `PyMuPDF` → `PyPDF2` → `pdfminer.six` → `pdftotext` (CLI).
 - **OCR Engine**: `Tesseract` → `EasyOCR` → `pytesseract`.
+
+### Email Attachment Handling (`.eml`)
+
+- Base64-encoded attachments are decoded before processing.
+- Text-like attachments (for example `.txt`, `.csv`, `.json`, `.xml`) are translated and re-encoded.
+- Binary attachments are preserved untouched to avoid corruption.
 
 ### Filesystem Safety
 - **Path Sanitization**: Automatically removes invalid characters and collapses excessive repetitions.

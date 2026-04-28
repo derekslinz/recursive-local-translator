@@ -67,7 +67,11 @@ class RenameProcessor:
                     except OSError:
                         pass
                 else:
-                    move_path(item, self.unique_path_func(dst_child))
+                    final_dst = self.unique_path_func(dst_child)
+                    move_path(item, final_dst)
+                    print(
+                        f"  Success: Moved directory: {item.relative_to(src_dir)} → {final_dst.relative_to(dst_dir.parent)}"
+                    )
                     stats_callback("items_moved")
             else:
                 new_name = self.translate_filename(item.name)
@@ -76,7 +80,12 @@ class RenameProcessor:
                     target = self.unique_path_func(target)
                 if new_name != item.name:
                     stats_callback("files_renamed")
+                    print(f"  Success: Renamed file: {item.name} → {target.name}")
                 move_path(item, target)
+                if new_name == item.name:
+                    print(
+                        f"  Success: Moved file: {item.name} → {target.relative_to(dst_dir.parent)}"
+                    )
                 stats_callback("items_moved")
 
     def process_dirs_recursive(self, current: Path, stats_callback) -> None:
@@ -92,6 +101,7 @@ class RenameProcessor:
                 target = self.unique_path_func(current / new_name)
                 stats_callback("files_renamed")
                 move_path(f, target)
+                print(f"  Success: Renamed file: {f.name} → {target.name}")
                 stats_callback("items_moved")
         for d in (p for p in items if safe_is_dir(p)):
             if d.name.startswith("."):
@@ -110,7 +120,7 @@ class RenameProcessor:
                 stats_callback("dirs_existing_merged")
             else:
                 new_path.mkdir(parents=True, exist_ok=True)
-                print(f"  Success: Created: {d.name} → {translated}")
+                print(f"  Success: Renamed directory: {d.name} → {translated}")
                 stats_callback("dirs_created")
             self.merge_dir_into(d, new_path, stats_callback)
             self.process_dirs_recursive(new_path, stats_callback)

@@ -1,9 +1,8 @@
 import re
-import os
 import errno
 import shutil
 from pathlib import Path
-from typing import Tuple, Optional
+from typing import Tuple
 
 try:
     from langdetect import detect as ld_detect
