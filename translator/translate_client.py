@@ -5,6 +5,7 @@ from pathlib import Path
 import ctranslate2
 import sentencepiece as spm
 
+
 class DirectTranslateClient:
     """Translate using CTranslate2 + SentencePiece directly on CUDA.
 
@@ -32,15 +33,13 @@ class DirectTranslateClient:
         self.target_lang = target_lang
         self._translator = None
         self._sp = None
-        
+
         # Discover package path if not provided
         self.pkg_path = pkg_path or self._discover_pkg(source_lang, target_lang)
 
         self.cache_file = cache_file
         self._db_lock = threading.Lock()
-        self.db = sqlite3.connect(
-            self.cache_file, check_same_thread=False, timeout=30
-        )
+        self.db = sqlite3.connect(self.cache_file, check_same_thread=False, timeout=30)
         with self._db_lock:
             self.db.execute("PRAGMA journal_mode=WAL;")
             self.db.execute("PRAGMA synchronous=NORMAL;")
@@ -59,7 +58,7 @@ class DirectTranslateClient:
             for d in base.iterdir():
                 if d.is_dir() and d.name.startswith(prefix):
                     return str(d)
-        
+
         # Default fallback (might not exist, but keeps old logic's behavior for RU/EN)
         return str(self._PKG_BASE_LOCATIONS[0] / f"translate-{source}_{target}-1_9")
 
@@ -83,6 +82,7 @@ class DirectTranslateClient:
             else:
                 try:
                     import torch
+
                     if torch.backends.mps.is_available():
                         actual_device = "mps"
                     else:
@@ -106,9 +106,17 @@ class DirectTranslateClient:
                 compute_type="auto",
             )
         except ValueError as e:
-            if actual_device in ("mps", "cuda") and ("unsupported device" in str(e).lower() or "not found" in str(e).lower()):
-                fallback_reason = "not supported by CTranslate2" if actual_device == "mps" else "not available"
-                print(f"  ℹ {actual_device.upper()} requested/detected but {fallback_reason}. Falling back to CPU.")
+            if actual_device in ("mps", "cuda") and (
+                "unsupported device" in str(e).lower() or "not found" in str(e).lower()
+            ):
+                fallback_reason = (
+                    "not supported by CTranslate2"
+                    if actual_device == "mps"
+                    else "not available"
+                )
+                print(
+                    f"  ℹ {actual_device.upper()} requested/detected but {fallback_reason}. Falling back to CPU."
+                )
                 actual_device = "cpu"
                 self._translator = ctranslate2.Translator(
                     model_path,
@@ -130,9 +138,7 @@ class DirectTranslateClient:
         retry: int = 3,
     ) -> str:
         """Translate text using CTranslate2 + SentencePiece."""
-        text = text.encode("utf-8", "surrogateescape").decode(
-            "utf-8", "ignore"
-        )
+        text = text.encode("utf-8", "surrogateescape").decode("utf-8", "ignore")
         if not text or not text.strip():
             return text
 

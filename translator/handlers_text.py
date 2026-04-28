@@ -2,8 +2,9 @@ import csv
 import json
 from pathlib import Path
 from typing import Optional
-from translator_utils import is_russian
-from handlers_base import BaseHandler
+from .translator_utils import is_russian
+from .handlers_base import BaseHandler
+
 
 class TextHandler(BaseHandler):
     def translate_text_inplace(self, path: Path) -> bool:

@@ -6,8 +6,11 @@ A high-performance, modular workspace translator designed to handle massive dire
 
 - **Recursive Workspace Translation**: Translates both directory names and filenames.
 - **In-place Content Translation**:
-  - **Text-based**: `.txt`, `.md`, `.log`, `.rst`, `.cfg`, `.conf`, `.tex`, `.yaml`, `.yml`, `.xml`, `.html`
-  - **Structured Data**: `.csv`, `.json`
+  - **Text/Documentation**: `.txt`, `.log`, `.nfo`, `.md`, `.mdx`, `.rmd`, `.rst`, `.adoc`, `.org`, `.wiki`, `.rtx`
+  - **Configuration/Web**: `.cfg`, `.conf`, `.toml`, `.properties`, `.mak`, `.cmake`, `.yaml`, `.yml`, `.xml`, `.html`, `.htm`, `.xhtml`, `.shtml`, `.json5`, `.jsonc`
+  - **Subtitles/Translation**: `.srt`, `.vtt`, `.ass`, `.ssa`, `.sub`, `.sbv`, `.po`, `.pot`
+  - **LaTeX**: `.tex`
+  - **Structured Data**: `.csv`, `.tsv`, `.json`
   - **Office Documents**: `.docx`, `.xlsx`, `.pptx` (preserves formatting)
 - **Sidecar Extracts**: Generates `.en.txt` translations for `.pdf`, `.vsd`, `.vsdx`, and images (via OCR).
 - **Format Upgrading**: Automatically converts legacy Office formats (`.doc`, `.xls`, `.ppt`, `.rtf`, `.odt`) to modern OpenXML formats using LibreOffice.
@@ -61,14 +64,14 @@ python3 translate_all.py
 
 ## Architecture
 
-The project is modularized for maintainability:
-
-- `translate_all.py`: CLI entry point and argument parsing.
-- `translator_workspace.py`: Orchestrates the multi-pass translation process.
-- `translate_client.py`: High-performance CTranslate2 client with SQLite caching.
-- `pass_rename.py`: Specialized logic for filesystem object translation.
-- `translator_utils.py`: Shared utilities for language detection and path sanitization.
-- `handlers_*.py`: Format-specific translation handlers (Text, Office, Media).
+The project is organized as follows:
+- `translate_all.py`: CLI entry point.
+- `translator/`: Core logic package:
+  - `translator_workspace.py`: Orchestrates the multi-pass translation process.
+  - `translate_client.py`: High-performance CTranslate2 client with SQLite caching.
+  - `pass_rename.py`: Specialized logic for filesystem object translation.
+  - `translator_utils.py`: Shared utilities for language detection and path sanitization.
+  - `handlers_*.py`: Format-specific translation handlers (Text, Office, Media).
 
 ## Security Note
 

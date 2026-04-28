@@ -4,8 +4,10 @@ import errno
 import shutil
 from pathlib import Path
 from typing import Tuple, Optional
+
 try:
     from langdetect import detect as ld_detect
+
     HAS_LANGDETECT = True
 except ImportError:
     HAS_LANGDETECT = False
@@ -21,6 +23,7 @@ GENERIC_TITLE_RE = re.compile(
     re.IGNORECASE,
 )
 
+
 def is_russian(s: str) -> bool:
     """Check if a string contains any Cyrillic characters."""
     if not s:
@@ -28,6 +31,7 @@ def is_russian(s: str) -> bool:
     # Sanitize surrogates to prevent UnicodeEncodeError in regex/json
     s = s.encode("utf-8", "surrogateescape").decode("utf-8", "ignore")
     return bool(CYRILLIC_RE.search(s))
+
 
 def detect_language(text: str) -> str:
     """Detect the language of the given text, falling back to 'ru' if detection fails or is unavailable."""
@@ -42,6 +46,7 @@ def detect_language(text: str) -> str:
     except Exception:
         return "ru" if is_russian(text) else "en"
 
+
 def sanitize_name(name: str) -> str:
     """Remove invalid characters and collapse excessive repetitions."""
     # Remove invalid filesystem characters
@@ -54,6 +59,7 @@ def sanitize_name(name: str) -> str:
         name = name[:255].rstrip()
     return name
 
+
 def split_suffixes(name: str) -> Tuple[str, str]:
     """Split filename into stem and all suffixes."""
     p = Path(name)
@@ -63,6 +69,7 @@ def split_suffixes(name: str) -> Tuple[str, str]:
     suf = "".join(suffixes)
     stem = name[: -len(suf)]
     return stem, suf
+
 
 def needs_content_based_name(stem: str) -> bool:
     """Check if the filename is generic enough to warrant renaming based on content."""
@@ -78,12 +85,14 @@ def needs_content_based_name(stem: str) -> bool:
         return True
     return False
 
+
 def safe_exists(path: Path) -> bool:
     """Safely check if a path exists."""
     try:
         return path.exists()
     except OSError:
         return False
+
 
 def safe_is_file(path: Path) -> bool:
     """Safely check if path is a file."""
@@ -92,12 +101,14 @@ def safe_is_file(path: Path) -> bool:
     except OSError:
         return False
 
+
 def safe_is_dir(path: Path) -> bool:
     """Safely check if path is a directory."""
     try:
         return path.is_dir()
     except OSError:
         return False
+
 
 def move_path(src: Path, dst: Path) -> None:
     """Move path, handling cross-device links."""

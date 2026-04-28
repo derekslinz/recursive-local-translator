@@ -17,7 +17,8 @@ Capabilities:
 import argparse
 import sys
 import traceback
-from translator_workspace import WorkspaceRUENTranslator
+from translator.translator_workspace import WorkspaceRUENTranslator
+
 
 def main():
     """Main entrypoint for the translation script."""
@@ -27,17 +28,26 @@ def main():
     if hasattr(sys.stderr, "reconfigure"):
         sys.stderr.reconfigure(errors="backslashreplace")
 
-    parser = argparse.ArgumentParser(description="Translate Russian workspace to English.")
+    parser = argparse.ArgumentParser(
+        description="Translate Russian workspace to English."
+    )
     parser.add_argument(
         "root_path",
         nargs="?",
         default=".",
-        help="Root path to process (default: current directory)"
+        help="Root path to process (default: current directory)",
     )
-    parser.add_argument("--sidecars", action="store_true", help="Write sidecar files for PDFs/images")
-    parser.add_argument("--workers", type=int, default=5, help="Number of concurrent workers")
     parser.add_argument(
-        "--cache-file", type=str, default=".translation_cache.db", help="Path to translation cache"
+        "--sidecars", action="store_true", help="Write sidecar files for PDFs/images"
+    )
+    parser.add_argument(
+        "--workers", type=int, default=5, help="Number of concurrent workers"
+    )
+    parser.add_argument(
+        "--cache-file",
+        type=str,
+        default=".translation_cache.db",
+        help="Path to translation cache",
     )
     parser.add_argument(
         "--device",
@@ -50,28 +60,25 @@ def main():
         "--source-lang",
         type=str,
         default="ru",
-        help="Default source language (default: ru)"
+        help="Default source language (default: ru)",
     )
     parser.add_argument(
-        "--target-lang",
-        type=str,
-        default="en",
-        help="Target language (default: en)"
+        "--target-lang", type=str, default="en", help="Target language (default: en)"
     )
     parser.add_argument(
         "--auto-detect",
         action="store_true",
-        help="Automatically detect source language per file/folder"
+        help="Automatically detect source language per file/folder",
     )
     parser.add_argument(
         "--rename-only",
         action="store_true",
-        help="Only execute the file/folder rename pass"
+        help="Only execute the file/folder rename pass",
     )
     parser.add_argument(
         "--upgrade-only",
         action="store_true",
-        help="Only execute the file format upgrade pass"
+        help="Only execute the file format upgrade pass",
     )
 
     args = parser.parse_args()
@@ -97,6 +104,7 @@ def main():
         print(f"\nError: Fatal error: {e}")
         traceback.print_exc()
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()
