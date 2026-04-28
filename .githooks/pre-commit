@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+STAGED_PY_FILES=()
+while IFS= read -r file; do
+  [[ -n "$file" ]] && STAGED_PY_FILES+=("$file")
+done < <(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.py$' || true)
+
+if [[ ${#STAGED_PY_FILES[@]} -eq 0 ]]; then
+  exit 0
+fi
+
+if command -v ruff >/dev/null 2>&1; then
+  RUFF_CMD=(ruff)
+elif [[ -x "$REPO_ROOT/.venv/bin/ruff" ]]; then
+  RUFF_CMD=("$REPO_ROOT/.venv/bin/ruff")
+elif python3 -m ruff --version >/dev/null 2>&1; then
+  RUFF_CMD=(python3 -m ruff)
+else
+  echo "Error: ruff is not installed."
+  echo "Install it with: pip install ruff"
+  exit 1
+fi
+
+echo "Running ruff on staged Python files..."
+"${RUFF_CMD[@]}" check "${STAGED_PY_FILES[@]}"

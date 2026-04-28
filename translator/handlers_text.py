@@ -1,5 +1,6 @@
 import csv
 import json
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Optional
 from .translator_utils import is_russian
@@ -112,3 +113,40 @@ class TextHandler(BaseHandler):
             return new_dict, changed
 
         return value, False
+
+    def translate_fb2_inplace(self, path: Path) -> bool:
+        return self.translate_xml_inplace(path)
+
+    def translate_xml_inplace(self, path: Path) -> bool:
+        try:
+            tree = ET.parse(path)
+            root = tree.getroot()
+        except Exception as e:
+            print(f"  Warning: XML parse error: {path}: {e}")
+            return False
+
+        changed = self.translate_xml_root(root)
+        if not changed:
+            return False
+
+        try:
+            tree.write(path, encoding="utf-8", xml_declaration=True)
+            return True
+        except Exception as e:
+            print(f"  Warning: XML write error: {path}: {e}")
+            return False
+
+    def translate_xml_root(self, root: ET.Element) -> bool:
+        changed = False
+        for node in root.iter():
+            if node.text:
+                new_text = self.translate_text_if_russian(node.text)
+                if new_text is not None and new_text != node.text:
+                    node.text = new_text
+                    changed = True
+            if node.tail:
+                new_tail = self.translate_text_if_russian(node.tail)
+                if new_tail is not None and new_tail != node.tail:
+                    node.tail = new_tail
+                    changed = True
+        return changed

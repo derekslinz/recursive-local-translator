@@ -10,6 +10,10 @@ Capabilities:
     - Data: .csv, .json
     - Office: .docx, .xlsx, .pptx
 - Sidecar extracts (.en.txt) for: .pdf, .vsd, .vsdx, and images (via OCR).
+    - Data: .csv, .json, .arb
+    - Office: .docx, .xlsx, .pptx, .odt, .ods, .odp
+    - Email / ebook: .eml, .epub, .fb2
+    - Sidecar extracts (.en.txt) for: .pdf, .vsd, .vsdx, .msg, .djvu, and images (via OCR).
 - Features: Language autodetection, manual source/target overrides, pass-specific execution, transliteration mode.
 - Excludes: .ini files to protect system configurations.
 """
@@ -37,6 +41,7 @@ Execution Passes:
   2. Upgrading: Converts legacy Office formats (.doc, .xls, .ppt, .rtf, .odt) to modern OpenXML.
   3. Content: Translates supported text, data, and office content in-place.
   4. Sidecars: Generates .en.txt extracts for PDF and Image files using OCR fallbacks.
+     Also supports sidecars for MSG and DJVU extraction.
 
 Examples:
   Translate current workspace using CUDA:

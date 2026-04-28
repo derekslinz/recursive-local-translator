@@ -1,6 +1,9 @@
 import subprocess
 import tempfile
 import shutil
+import io
+import zipfile
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Callable
 from .translator_utils import is_russian, safe_exists
@@ -161,3 +164,64 @@ class OfficeHandler(BaseHandler):
             shutil.rmtree(temp_outdir, ignore_errors=True)
             shutil.rmtree(temp_user_dir, ignore_errors=True)
         return path
+
+    def translate_odf_inplace(self, path: Path) -> bool:
+        """Translate OpenDocument files (.odt, .ods, .odp) by editing content.xml in-place."""
+        try:
+            with zipfile.ZipFile(path, "r") as zf:
+                entries = []
+                changed = False
+                for info in zf.infolist():
+                    data = zf.read(info.filename)
+                    if info.filename == "content.xml":
+                        data, content_changed = self._translate_xml_bytes(data)
+                        changed = changed or content_changed
+                    entries.append((info, data))
+        except Exception as e:
+            print(f"  Warning: ODF read error: {path}: {e}")
+            return False
+
+        if not changed:
+            return False
+
+        try:
+            with zipfile.ZipFile(path, "w") as out:
+                for info, data in entries:
+                    new_info = zipfile.ZipInfo(info.filename)
+                    new_info.date_time = info.date_time
+                    new_info.compress_type = info.compress_type
+                    new_info.comment = info.comment
+                    new_info.extra = info.extra
+                    new_info.internal_attr = info.internal_attr
+                    new_info.external_attr = info.external_attr
+                    out.writestr(new_info, data)
+            return True
+        except Exception as e:
+            print(f"  Warning: ODF write error: {path}: {e}")
+            return False
+
+    def _translate_xml_bytes(self, data: bytes) -> tuple[bytes, bool]:
+        try:
+            root = ET.fromstring(data)
+        except Exception:
+            return data, False
+
+        changed = False
+        for node in root.iter():
+            if node.text:
+                new_text = self.translate_text_if_russian(node.text)
+                if new_text is not None and new_text != node.text:
+                    node.text = new_text
+                    changed = True
+            if node.tail:
+                new_tail = self.translate_text_if_russian(node.tail)
+                if new_tail is not None and new_tail != node.tail:
+                    node.tail = new_tail
+                    changed = True
+
+        if not changed:
+            return data, False
+
+        out = io.BytesIO()
+        ET.ElementTree(root).write(out, encoding="utf-8", xml_declaration=True)
+        return out.getvalue(), True

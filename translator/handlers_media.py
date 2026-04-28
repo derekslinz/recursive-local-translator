@@ -15,6 +15,44 @@ except ImportError:
 
 
 class MediaHandler(BaseHandler):
+    def extract_msg_text(self, path: Path, limit_chars: int = 100000) -> Optional[str]:
+        try:
+            import extract_msg
+
+            msg = extract_msg.Message(str(path))
+            parts = []
+            if msg.subject:
+                parts.append(str(msg.subject))
+            if msg.body:
+                parts.append(str(msg.body))
+            if getattr(msg, "htmlBody", None):
+                parts.append(str(msg.htmlBody))
+            text = "\n\n".join(p for p in parts if p and str(p).strip())
+            if text:
+                return text[:limit_chars]
+        except ImportError:
+            pass
+        except Exception as e:
+            with self.lock:
+                print(f"  Warning: MSG extract error for {path.name}: {e}")
+        return None
+
+    def extract_djvu_text(self, path: Path, limit_chars: int = 100000) -> Optional[str]:
+        try:
+            res = subprocess.run(
+                ["djvutxt", str(path)],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+            if res.returncode == 0:
+                text = res.stdout.decode(errors="ignore").strip()
+                if text:
+                    return text[:limit_chars]
+        except Exception:
+            pass
+        return None
+
     def extract_vsd_text(self, path: Path, limit_chars: int = 20000) -> Optional[str]:
         try:
             res = subprocess.run(
