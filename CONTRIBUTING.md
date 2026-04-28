@@ -7,11 +7,10 @@ Thank you for your interest in contributing! This document provides information 
 ### Project Structure
 
 - `translate_all.py`: The CLI entry point.
-- `translator/`:
-    - `translator_workspace.py`: Main orchestration logic.
-    - `translate_client.py`: CTranslate2 engine and SQLite caching.
-    - `pass_rename.py`: Filesystem renaming logic.
-    - `handlers_*.py`: Specialized content handlers (Text, Office, Media).
+- `translator/translator_workspace.py`: Main orchestration logic.
+- `translator/translate_client.py`: CTranslate2 engine and SQLite caching.
+- `translator/pass_rename.py`: Filesystem renaming logic.
+- `translator/handlers_*.py`: Specialized content handlers (Text, Office, Media).
 - `tests/`: Comprehensive unit test suite using `pytest`.
 
 ### Running Tests
