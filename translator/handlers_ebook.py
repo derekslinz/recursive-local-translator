@@ -1,8 +1,10 @@
 import io
+import shutil
+import tempfile
 import zipfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional, Tuple
 
 from .handlers_base import BaseHandler
 
@@ -44,26 +46,38 @@ class EbookHandler(BaseHandler):
             return False
 
         try:
-            with zipfile.ZipFile(path, "w") as out:
-                # EPUB spec: mimetype must be first and stored (no compression)
-                mimetype_entry = next(
-                    (pair for pair in files if pair[0].filename == "mimetype"), None
-                )
-                if mimetype_entry:
-                    info, data = mimetype_entry
-                    mime_info = zipfile.ZipInfo("mimetype")
-                    mime_info.compress_type = zipfile.ZIP_STORED
-                    out.writestr(mime_info, data)
-                for info, data in files:
-                    if info.filename == "mimetype":
-                        continue
-                    new_info = zipfile.ZipInfo(info.filename)
-                    new_info.date_time = info.date_time
-                    new_info.external_attr = info.external_attr
-                    new_info.compress_type = info.compress_type
-                    new_info.comment = info.comment
-                    new_info.extra = info.extra
-                    out.writestr(new_info, data)
+            with tempfile.NamedTemporaryFile(
+                suffix=path.suffix, dir=path.parent, delete=False
+            ) as tmp_fh:
+                tmp_path = Path(tmp_fh.name)
+            try:
+                with zipfile.ZipFile(tmp_path, "w") as out:
+                    # EPUB spec: mimetype must be first and stored (no compression)
+                    mimetype_entry = next(
+                        (pair for pair in files if pair[0].filename == "mimetype"), None
+                    )
+                    if mimetype_entry:
+                        _, data = mimetype_entry
+                        mime_info = zipfile.ZipInfo("mimetype")
+                        mime_info.compress_type = zipfile.ZIP_STORED
+                        out.writestr(mime_info, data)
+                    for info, data in files:
+                        if info.filename == "mimetype":
+                            continue
+                        new_info = zipfile.ZipInfo(info.filename)
+                        new_info.date_time = info.date_time
+                        new_info.external_attr = info.external_attr
+                        new_info.compress_type = info.compress_type
+                        new_info.comment = info.comment
+                        new_info.extra = info.extra
+                        out.writestr(new_info, data)
+                shutil.move(str(tmp_path), str(path))
+            except Exception:
+                try:
+                    tmp_path.unlink(missing_ok=True)
+                except OSError:
+                    pass
+                raise
             return True
         except Exception as e:
             print(f"  Warning: EPUB write error: {path}: {e}")
@@ -81,7 +95,7 @@ class EbookHandler(BaseHandler):
                     return full_path
         return None
 
-    def _find_epub_content_docs(self, opf_xml: bytes, opf_path: str) -> list[str]:
+    def _find_epub_content_docs(self, opf_xml: bytes, opf_path: str) -> List[str]:
         try:
             root = ET.fromstring(opf_xml)
         except Exception:
@@ -103,7 +117,7 @@ class EbookHandler(BaseHandler):
                 docs.append(str((Path(base) / href).as_posix()))
         return docs
 
-    def _find_toc_docs(self, opf_xml: bytes, opf_path: str) -> list[str]:
+    def _find_toc_docs(self, opf_xml: bytes, opf_path: str) -> List[str]:
         try:
             root = ET.fromstring(opf_xml)
         except Exception:
@@ -118,7 +132,7 @@ class EbookHandler(BaseHandler):
                 docs.append(str((Path(base) / href).as_posix()))
         return docs
 
-    def _translate_xhtml_bytes(self, data: bytes) -> tuple[bytes, bool]:
+    def _translate_xhtml_bytes(self, data: bytes) -> Tuple[bytes, bool]:
         try:
             root = ET.fromstring(data)
         except Exception:

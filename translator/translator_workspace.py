@@ -78,15 +78,10 @@ class WorkspaceRUENTranslator:
             ".pot",
             ".tex",
             ".jsonl",
-            ".svg",
             ".lrc",
             ".info",
             ".textile",
             ".strings",
-            ".resx",
-            ".xliff",
-            ".xlf",
-            ".tmx",
         }
         self.image_extensions = {".png", ".jpg", ".jpeg", ".tiff", ".bmp"}
 
@@ -246,10 +241,19 @@ class WorkspaceRUENTranslator:
 
     def _is_qt_ts_file(self, path: Path) -> bool:
         try:
-            head = path.read_text(encoding="utf-8", errors="ignore")[:1024].lower()
+            head = path.read_text(encoding="utf-8", errors="ignore")[:1024].lower().lstrip()
         except Exception:
             return False
-        return "<?xml" in head or "<ts" in head
+
+        if head.startswith("<?xml"):
+            decl_end = head.find("?>")
+            if decl_end == -1:
+                return False
+            head = head[decl_end + 2 :].lstrip()
+
+        return head.startswith("<ts") and (
+            len(head) == 3 or head[3].isspace() or head[3] == ">"
+        )
 
     def _process_content_for_file(self, path: Path) -> None:
         if not safe_is_file(path):

@@ -3,7 +3,7 @@ import email.encoders
 from email import policy
 from email.parser import BytesParser
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
 from .handlers_base import BaseHandler
 
@@ -138,7 +138,7 @@ class EmailHandler(BaseHandler):
 
     def _decode_attachment_text(
         self, part: email.message.Message, payload_bytes: bytes
-    ) -> tuple[Optional[str], Optional[str]]:
+    ) -> Tuple[Optional[str], Optional[str]]:
         preferred = part.get_content_charset()
         tried = []
         candidates = [preferred] if preferred else []

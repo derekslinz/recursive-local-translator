@@ -5,7 +5,7 @@ import io
 import zipfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Tuple
 from .translator_utils import safe_exists
 from .handlers_base import BaseHandler
 
@@ -185,22 +185,34 @@ class OfficeHandler(BaseHandler):
             return False
 
         try:
-            with zipfile.ZipFile(path, "w") as out:
-                for info, data in entries:
-                    new_info = zipfile.ZipInfo(info.filename)
-                    new_info.date_time = info.date_time
-                    new_info.compress_type = info.compress_type
-                    new_info.comment = info.comment
-                    new_info.extra = info.extra
-                    new_info.internal_attr = info.internal_attr
-                    new_info.external_attr = info.external_attr
-                    out.writestr(new_info, data)
+            with tempfile.NamedTemporaryFile(
+                suffix=path.suffix, dir=path.parent, delete=False
+            ) as tmp_fh:
+                tmp_path = Path(tmp_fh.name)
+            try:
+                with zipfile.ZipFile(tmp_path, "w") as out:
+                    for info, data in entries:
+                        new_info = zipfile.ZipInfo(info.filename)
+                        new_info.date_time = info.date_time
+                        new_info.compress_type = info.compress_type
+                        new_info.comment = info.comment
+                        new_info.extra = info.extra
+                        new_info.internal_attr = info.internal_attr
+                        new_info.external_attr = info.external_attr
+                        out.writestr(new_info, data)
+                shutil.move(str(tmp_path), str(path))
+            except Exception:
+                try:
+                    tmp_path.unlink(missing_ok=True)
+                except OSError:
+                    pass
+                raise
             return True
         except Exception as e:
             print(f"  Warning: ODF write error: {path}: {e}")
             return False
 
-    def _translate_xml_bytes(self, data: bytes) -> tuple[bytes, bool]:
+    def _translate_xml_bytes(self, data: bytes) -> Tuple[bytes, bool]:
         try:
             root = ET.fromstring(data)
         except Exception:
