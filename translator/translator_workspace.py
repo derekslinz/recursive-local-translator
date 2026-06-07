@@ -1,3 +1,4 @@
+import builtins
 import concurrent.futures
 import os
 import threading
@@ -388,18 +389,32 @@ class WorkspaceRUENTranslator:
                 if safe_is_file(p) and not p.name.startswith(".")
             ]
             try:
-                from tqdm import tqdm
-                files = tqdm(files, desc="Content", unit="file")
+                from tqdm import tqdm as _tqdm
+                _tqdm_available = True
             except ImportError:
-                pass
-            if self.auto_detect or self.workers <= 1:
-                for p in files:
-                    self._process_content_for_file(p)
-            else:
-                with concurrent.futures.ThreadPoolExecutor(max_workers=self.workers) as pool:
-                    futures = {pool.submit(self._process_content_for_file, p): p for p in files}
-                    for fut in concurrent.futures.as_completed(futures):
-                        exc = fut.exception()
-                        if exc:
-                            print(f"  Warning: Worker error for {futures[fut].name}: {exc}")
+                _tqdm_available = False
+
+            _orig_print = builtins.print
+            if _tqdm_available:
+                builtins.print = _tqdm.write
+            try:
+                if self.auto_detect or self.workers <= 1:
+                    it = _tqdm(files, desc="Content", unit="file") if _tqdm_available else files
+                    for p in it:
+                        self._process_content_for_file(p)
+                else:
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=self.workers) as pool:
+                        future_to_path = {pool.submit(self._process_content_for_file, p): p for p in files}
+                        it = _tqdm(
+                            concurrent.futures.as_completed(future_to_path),
+                            total=len(future_to_path),
+                            desc="Content",
+                            unit="file",
+                        ) if _tqdm_available else concurrent.futures.as_completed(future_to_path)
+                        for fut in it:
+                            exc = fut.exception()
+                            if exc:
+                                print(f"  Warning: Worker error for {future_to_path[fut].name}: {exc}")
+            finally:
+                builtins.print = _orig_print
         print("\n" + "=" * 70 + f"\nDONE in {time.time() - t0:.2f}s\n" + "=" * 70)
