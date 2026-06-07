@@ -1,4 +1,5 @@
 import io
+import posixpath
 import shutil
 import tempfile
 import zipfile
@@ -114,7 +115,7 @@ class EbookHandler(BaseHandler):
                 "text/html",
                 "application/x-dtbncx+xml",
             }:
-                docs.append(str((Path(base) / href).as_posix()))
+                docs.append(posixpath.normpath(posixpath.join(base, href)))
         return docs
 
     def _find_toc_docs(self, opf_xml: bytes, opf_path: str) -> List[str]:
@@ -129,7 +130,7 @@ class EbookHandler(BaseHandler):
                 continue
             href = item.attrib.get("href")
             if href:
-                docs.append(str((Path(base) / href).as_posix()))
+                docs.append(posixpath.normpath(posixpath.join(base, href)))
         return docs
 
     def _translate_xhtml_bytes(self, data: bytes) -> Tuple[bytes, bool]:

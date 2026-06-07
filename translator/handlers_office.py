@@ -44,6 +44,15 @@ class OfficeHandler(BaseHandler):
                     if new_text and new_text != p.text:
                         p.text = new_text
                         changed = True
+            for table in doc.tables:
+                for row in table.rows:
+                    for cell in row.cells:
+                        for para in cell.paragraphs:
+                            if para.text:
+                                new_text = self.translate_text_if_russian(para.text)
+                                if new_text and new_text != para.text:
+                                    para.text = new_text
+                                    changed = True
             if changed:
                 doc.save(path)
                 return True
@@ -68,6 +77,17 @@ class OfficeHandler(BaseHandler):
                                 if translation and translation != run.text:
                                     run.text = translation
                                     changed = True
+            for slide in prs.slides:
+                if not slide.has_notes_slide:
+                    continue
+                notes_tf = slide.notes_slide.notes_text_frame
+                for para in notes_tf.paragraphs:
+                    for run in para.runs:
+                        if run.text:
+                            translation = self.translate_text_if_russian(run.text)
+                            if translation and translation != run.text:
+                                run.text = translation
+                                changed = True
             if changed:
                 prs.save(path)
                 return True

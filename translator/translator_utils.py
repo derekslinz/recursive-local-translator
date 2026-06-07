@@ -1,3 +1,4 @@
+import os
 import re
 import errno
 import shutil
@@ -130,6 +131,8 @@ def detect_language(text: str) -> str:
 
 def sanitize_name(name: str) -> str:
     """Remove invalid characters and collapse excessive repetitions."""
+    # Strip null bytes — os.rename rejects paths containing \x00
+    name = name.replace("\x00", "")
     # Replace invalid filesystem characters with underscores
     name = re.sub(r'[<>:"/\\|?*]', "_", name)
     # Collapse whitespace
@@ -140,8 +143,9 @@ def sanitize_name(name: str) -> str:
     name = name.strip(" ._")
     # Collapse repeating characters (e.g., more than 5 consecutive characters -> single character)
     name = re.sub(r"(.)\1{5,}", r"\1", name)
-    if len(name) > 255:
-        name = name[:255].rstrip()
+    while len(os.fsencode(name)) > 255:
+        name = name[:-1]
+    name = name.rstrip()
     return name or "unnamed"
 
 

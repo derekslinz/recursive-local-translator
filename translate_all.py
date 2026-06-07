@@ -114,10 +114,28 @@ Examples:
         action="store_true",
         help="Convert Cyrillic to Latin script without semantic translation (extremely fast)",
     )
+    parser.add_argument(
+        "--skip-translated",
+        action="store_true",
+        help="Skip files already translated in a previous run (tracked in the cache database)",
+    )
+    parser.add_argument(
+        "--glossary",
+        type=str,
+        default=None,
+        metavar="PATH",
+        help="JSON file mapping source-language terms to forced target translations",
+    )
 
     args = parser.parse_args()
 
     try:
+        glossary = {}
+        if args.glossary:
+            import json as _json
+            with open(args.glossary, encoding="utf-8") as _f:
+                glossary = _json.load(_f)
+
         tr = WorkspaceRUENTranslator(
             root_path=args.root_path,
             translate_extract_sidecars=args.sidecars,
@@ -130,6 +148,8 @@ Examples:
             rename_only=args.rename_only,
             upgrade_only=args.upgrade_only,
             transliterate=args.transliterate,
+            skip_translated=args.skip_translated,
+            glossary=glossary,
         )
         tr.run()
     except KeyboardInterrupt:

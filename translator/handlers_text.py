@@ -4,6 +4,12 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from .handlers_base import BaseHandler
 
+try:
+    from lxml import etree as _lxml_etree
+    HAS_LXML = True
+except ImportError:
+    HAS_LXML = False
+
 
 class TextHandler(BaseHandler):
     def translate_text_inplace(self, path: Path) -> bool:
@@ -116,6 +122,41 @@ class TextHandler(BaseHandler):
         return self.translate_xml_inplace(path)
 
     def translate_xml_inplace(self, path: Path) -> bool:
+        if HAS_LXML:
+            return self._translate_xml_lxml(path)
+        return self._translate_xml_et(path)
+
+    def _translate_xml_lxml(self, path: Path) -> bool:
+        try:
+            parser = _lxml_etree.XMLParser(remove_blank_text=False, resolve_entities=False)
+            tree = _lxml_etree.parse(str(path), parser)
+            root = tree.getroot()
+        except Exception as e:
+            print(f"  Warning: lxml parse error: {path}: {e}")
+            return self._translate_xml_et(path)
+
+        changed = False
+        for node in root.iter():
+            if node.text:
+                new_text = self.translate_text_if_russian(node.text)
+                if new_text is not None and new_text != node.text:
+                    node.text = new_text
+                    changed = True
+            if node.tail:
+                new_tail = self.translate_text_if_russian(node.tail)
+                if new_tail is not None and new_tail != node.tail:
+                    node.tail = new_tail
+                    changed = True
+        if not changed:
+            return False
+        try:
+            tree.write(str(path), encoding="utf-8", xml_declaration=True, pretty_print=False)
+            return True
+        except Exception as e:
+            print(f"  Warning: lxml write error: {path}: {e}")
+            return False
+
+    def _translate_xml_et(self, path: Path) -> bool:
         try:
             tree = ET.parse(path)
             root = tree.getroot()

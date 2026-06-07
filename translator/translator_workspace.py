@@ -1,3 +1,4 @@
+import concurrent.futures
 import os
 import threading
 import time
@@ -31,15 +32,19 @@ class WorkspaceRUENTranslator:
         self.auto_detect = kwargs.get("auto_detect", False)
 
         self.transliterate = kwargs.get("transliterate", False)
+        self._glossary = kwargs.get("glossary") or {}
         self.client = DirectTranslateClient(
             cache_file=kwargs.get("cache_file", ".translation_cache.db"),
             device=kwargs.get("device", "auto"),
             source_lang=self.source_lang,
             target_lang=self.target_lang,
             transliterate_only=self.transliterate,
+            glossary=self._glossary,
         )
         self.rename_only = kwargs.get("rename_only", False)
         self.upgrade_only = kwargs.get("upgrade_only", False)
+        self.workers = kwargs.get("workers", 5)
+        self.skip_translated = kwargs.get("skip_translated", False)
         self.translate_extract_sidecars = kwargs.get("translate_extract_sidecars", True)
         self.text_extensions = {
             ".txt",
@@ -123,11 +128,15 @@ class WorkspaceRUENTranslator:
             suf, stem = path.suffix, path.stem
             while len(os.fsencode(stem)) > 250:
                 stem = stem[:-1].rstrip()
+            if not stem:
+                return path  # suffix alone is too long; can't construct a valid unique name
             base, i = path.with_name(stem), 1
             while True:
                 name = f"{base.name}-{i}{suf}"
                 while len(os.fsencode(name)) > 255:
                     stem = base.name[:-1].rstrip()
+                    if not stem:
+                        return path  # can't shorten further
                     base = base.with_name(stem)
                     name = f"{base.name}-{i}{suf}"
                 new_p = path.with_name(name)
@@ -164,7 +173,7 @@ class WorkspaceRUENTranslator:
             path.rename(new_path)
             self._stats_inc("files_content_renamed")
             print(f"    [Renamed via content]: {new_path.name}")
-        except OSError:
+        except (OSError, ValueError):
             pass
 
     def _get_content_snippet(self, path: Path) -> Optional[str]:
@@ -229,6 +238,7 @@ class WorkspaceRUENTranslator:
                 source_lang=source,
                 target_lang=self.target_lang,
                 transliterate_only=self.transliterate,
+                glossary=self._glossary,
             )
             self.client.ensure_ready()
             # Update handlers with new client
@@ -258,6 +268,15 @@ class WorkspaceRUENTranslator:
     def _process_content_for_file(self, path: Path) -> None:
         if not safe_is_file(path):
             return
+
+        if self.skip_translated:
+            try:
+                stat = path.stat()
+                if self.client.is_file_translated(str(path), stat.st_mtime, stat.st_size):
+                    self._stats_inc("files_content_skipped")
+                    return
+            except OSError:
+                pass
 
         # Handle autodetection
         if self.auto_detect:
@@ -305,6 +324,12 @@ class WorkspaceRUENTranslator:
             self._stats_inc("files_content_translated")
             print(f"  Success: Content translated ({t}): {path.name}")
             self._maybe_rename_via_content(path)
+            if self.skip_translated:
+                try:
+                    stat = path.stat()
+                    self.client.mark_file_translated(str(path), stat.st_mtime, stat.st_size)
+                except OSError:
+                    pass
         else:
             self._stats_inc("files_content_skipped")
 
@@ -358,9 +383,23 @@ class WorkspaceRUENTranslator:
             print(f"  Success: Upgraded {upgraded} legacy files")
         if not self.rename_only and not self.upgrade_only:
             print("\nPASS 3: Content...")
-            [
-                self._process_content_for_file(p)
-                for p in self.root_path.rglob("*")
+            files = [
+                p for p in self.root_path.rglob("*")
                 if safe_is_file(p) and not p.name.startswith(".")
             ]
+            try:
+                from tqdm import tqdm
+                files = tqdm(files, desc="Content", unit="file")
+            except ImportError:
+                pass
+            if self.auto_detect or self.workers <= 1:
+                for p in files:
+                    self._process_content_for_file(p)
+            else:
+                with concurrent.futures.ThreadPoolExecutor(max_workers=self.workers) as pool:
+                    futures = {pool.submit(self._process_content_for_file, p): p for p in files}
+                    for fut in concurrent.futures.as_completed(futures):
+                        exc = fut.exception()
+                        if exc:
+                            print(f"  Warning: Worker error for {futures[fut].name}: {exc}")
         print("\n" + "=" * 70 + f"\nDONE in {time.time() - t0:.2f}s\n" + "=" * 70)

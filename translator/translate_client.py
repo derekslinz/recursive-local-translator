@@ -2,6 +2,7 @@ import sqlite3
 import threading
 import time
 from pathlib import Path
+from typing import Optional, Dict
 import ctranslate2
 import sentencepiece as spm
 
@@ -28,11 +29,14 @@ class DirectTranslateClient:
         source_lang: str = "ru",
         target_lang: str = "en",
         transliterate_only: bool = False,
+        glossary: Optional[Dict[str, str]] = None,
     ):
         self.device = device
         self.source_lang = source_lang
         self.target_lang = target_lang
+        self.lang_pair = f"{source_lang}_{target_lang}"
         self.transliterate_only = transliterate_only
+        self._glossary: Dict[str, str] = glossary or {}
         self._translator = None
         self._sp = None
 
@@ -46,8 +50,13 @@ class DirectTranslateClient:
             self.db.execute("PRAGMA journal_mode=WAL;")
             self.db.execute("PRAGMA synchronous=NORMAL;")
             self.db.execute(
-                "CREATE TABLE IF NOT EXISTS translations "
-                "(source TEXT PRIMARY KEY, target TEXT)"
+                "CREATE TABLE IF NOT EXISTS translations_v2 "
+                "(source TEXT NOT NULL, lang_pair TEXT NOT NULL, target TEXT, "
+                "PRIMARY KEY (source, lang_pair))"
+            )
+            self.db.execute(
+                "CREATE TABLE IF NOT EXISTS translated_files "
+                "(path TEXT PRIMARY KEY, mtime REAL, size INTEGER)"
             )
             self.db.commit()
 
@@ -134,13 +143,7 @@ class DirectTranslateClient:
         self.device = actual_device
         print(f"Success: CTranslate2 ready ({actual_device})")
 
-    def translate(
-        self,
-        text: str,
-        source_lang: str = "ru",
-        target_lang: str = "en",
-        retry: int = 3,
-    ) -> str:
+    def translate(self, text: str, retry: int = 3) -> str:
         """Translate text using CTranslate2 + SentencePiece or transliterate."""
         text = text.encode("utf-8", "surrogateescape").decode("utf-8", "ignore")
         if not text or not text.strip():
@@ -151,9 +154,13 @@ class DirectTranslateClient:
 
             return transliterate_text(text)
 
+        if self._glossary and text in self._glossary:
+            return self._glossary[text]
+
         with self._db_lock:
             cur = self.db.execute(
-                "SELECT target FROM translations WHERE source = ?", (text,)
+                "SELECT target FROM translations_v2 WHERE source = ? AND lang_pair = ?",
+                (text, self.lang_pair),
             )
             row = cur.fetchone()
             if row:
@@ -167,9 +174,9 @@ class DirectTranslateClient:
 
                 with self._db_lock:
                     self.db.execute(
-                        "INSERT OR IGNORE INTO translations "
-                        "(source, target) VALUES (?, ?)",
-                        (text, translated),
+                        "INSERT OR IGNORE INTO translations_v2 "
+                        "(source, lang_pair, target) VALUES (?, ?, ?)",
+                        (text, self.lang_pair, translated),
                     )
                     self.db.commit()
                 return translated
@@ -178,3 +185,19 @@ class DirectTranslateClient:
                 print(f"  Warning: Translation error for '{text[:50]}...': {e}")
                 time.sleep(0.5)
         return text
+
+    def is_file_translated(self, path: str, mtime: float, size: int) -> bool:
+        with self._db_lock:
+            cur = self.db.execute(
+                "SELECT mtime, size FROM translated_files WHERE path = ?", (path,)
+            )
+            row = cur.fetchone()
+            return row is not None and row[0] == mtime and row[1] == size
+
+    def mark_file_translated(self, path: str, mtime: float, size: int) -> None:
+        with self._db_lock:
+            self.db.execute(
+                "INSERT OR REPLACE INTO translated_files (path, mtime, size) VALUES (?, ?, ?)",
+                (path, mtime, size),
+            )
+            self.db.commit()
