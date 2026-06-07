@@ -46,6 +46,7 @@ class WorkspaceRUENTranslator:
         self.upgrade_only = kwargs.get("upgrade_only", False)
         self.workers = kwargs.get("workers", 5)
         self.skip_translated = kwargs.get("skip_translated", False)
+        self.only_extensions: set = kwargs.get("only_extensions") or set()
         self.translate_extract_sidecars = kwargs.get("translate_extract_sidecars", True)
         self.text_extensions = {
             ".txt",
@@ -113,14 +114,35 @@ class WorkspaceRUENTranslator:
                 "files_renamed",
                 "files_content_translated",
                 "files_content_skipped",
-                "sidecars_written",
                 "files_content_renamed",
+                "sidecars_written",
+                "sidecars_skipped",
             ]
         }
 
     def _stats_inc(self, key):
         with self._lock:
             self.stats[key] += 1
+
+    def _print_stats(self) -> None:
+        labels = {
+            "dirs_created": "Directories renamed",
+            "dirs_existing_merged": "Directories merged",
+            "items_moved": "Items moved",
+            "files_renamed": "Files renamed",
+            "files_content_translated": "Files translated",
+            "files_content_skipped": "Files skipped",
+            "files_content_renamed": "Files renamed by content",
+            "sidecars_written": "Sidecars written",
+            "sidecars_skipped": "Sidecars skipped",
+        }
+        rows = [(labels[k], v) for k, v in self.stats.items() if v]
+        if not rows:
+            return
+        print("\nSTATS:")
+        w = max(len(label) for label, _ in rows)
+        for label, count in rows:
+            print(f"  {label:<{w}}  {count:,}")
 
     def _unique_path(self, path: Path) -> Path:
         with self._lock:
@@ -279,6 +301,9 @@ class WorkspaceRUENTranslator:
             except OSError:
                 pass
 
+        if self.only_extensions and path.suffix.lower() not in self.only_extensions:
+            return
+
         # Handle autodetection
         if self.auto_detect:
             snippet = self._get_content_snippet(path)
@@ -335,6 +360,15 @@ class WorkspaceRUENTranslator:
             self._stats_inc("files_content_skipped")
 
     def _process_sidecar(self, path: Path, suf: str) -> None:
+        if self.skip_translated:
+            try:
+                stat = path.stat()
+                if self.client.is_file_translated(str(path), stat.st_mtime, stat.st_size):
+                    self._stats_inc("sidecars_skipped")
+                    return
+            except OSError:
+                pass
+
         text = None
         if suf == ".pdf":
             text = self.media_handler.extract_pdf_text(path)
@@ -357,6 +391,12 @@ class WorkspaceRUENTranslator:
                     self._stats_inc("sidecars_written")
                     self._stats_inc("files_content_translated")
                     print(f"  Success: Sidecar written: {path.name}.en.txt")
+                    if self.skip_translated:
+                        try:
+                            stat = path.stat()
+                            self.client.mark_file_translated(str(path), stat.st_mtime, stat.st_size)
+                        except OSError:
+                            pass
                     return
         self._stats_inc("files_content_skipped")
 
@@ -417,4 +457,5 @@ class WorkspaceRUENTranslator:
                                 print(f"  Warning: Worker error for {future_to_path[fut].name}: {exc}")
             finally:
                 builtins.print = _orig_print
+        self._print_stats()
         print("\n" + "=" * 70 + f"\nDONE in {time.time() - t0:.2f}s\n" + "=" * 70)

@@ -126,15 +126,39 @@ Examples:
         metavar="PATH",
         help="JSON file mapping source-language terms to forced target translations",
     )
+    parser.add_argument(
+        "--only",
+        type=str,
+        default=None,
+        metavar="EXTS",
+        help="Comma-separated extensions to process in PASS 3 (e.g. txt,json,docx); all others skipped",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Reprocess all files even if already translated (overrides auto-resume when cache DB exists)",
+    )
 
     args = parser.parse_args()
 
     try:
+        from pathlib import Path as _Path
         glossary = {}
         if args.glossary:
             import json as _json
             with open(args.glossary, encoding="utf-8") as _f:
                 glossary = _json.load(_f)
+
+        # Auto-enable skip-translated when resuming an existing cache DB
+        skip_translated = args.skip_translated
+        if not skip_translated and not args.force and _Path(args.cache_file).exists():
+            skip_translated = True
+            print(f"  ℹ Resuming: {args.cache_file} found — skip-translated auto-enabled (use --force to reprocess all)")
+
+        only_extensions = (
+            {("." + e.lstrip(".")).lower() for e in args.only.split(",")}
+            if args.only else set()
+        )
 
         tr = WorkspaceRUENTranslator(
             root_path=args.root_path,
@@ -148,8 +172,9 @@ Examples:
             rename_only=args.rename_only,
             upgrade_only=args.upgrade_only,
             transliterate=args.transliterate,
-            skip_translated=args.skip_translated,
+            skip_translated=skip_translated,
             glossary=glossary,
+            only_extensions=only_extensions,
         )
         tr.run()
     except KeyboardInterrupt:
