@@ -401,33 +401,67 @@ class WorkspaceRUENTranslator:
         self._stats_inc("files_content_skipped")
 
     def run(self) -> None:
+        from .translator_utils import move_path
         print("=" * 70 + "\nRU→EN WORKSPACE TRANSLATOR\n" + "=" * 70)
         self.client.ensure_ready()
         t0 = time.time()
+
+        single_file = self.root_path.is_file()
+        # For a single-file target, track the path across passes (rename can move it)
+        current = self.root_path if single_file else None
+
         if not self.upgrade_only:
             print("\nPASS 1: Renaming...")
-            self.rename_proc.process_dirs_recursive(self.root_path, self._stats_inc)
+            if single_file:
+                p = current
+                if not p.name.startswith(".") and not p.name.startswith("~$"):
+                    new_name = self.rename_proc.translate_filename(p.name)
+                    if new_name != p.name:
+                        target = self._unique_path(p.parent / new_name)
+                        move_path(p, target)
+                        self._stats_inc("files_renamed")
+                        self._stats_inc("items_moved")
+                        print(f"  Success: Renamed file: {p.name} → {target.name}")
+                        current = target
+            else:
+                self.rename_proc.process_dirs_recursive(self.root_path, self._stats_inc)
+
         if not self.rename_only:
             print("\nPASS 2: Upgrading...")
-            legacy = [
-                p
-                for p in self.root_path.rglob("*")
-                if safe_is_file(p)
-                and p.suffix.lower() in {".doc", ".xls", ".ppt", ".rtf", ".odt"}
-            ]
-            upgraded = 0
-            for p in legacy:
-                new_path = self.office_handler.upgrade_office_file(p, self._unique_path)
-                if new_path != p:
-                    upgraded += 1
-                    print(f"  Success: Upgraded file: {p.name} → {new_path.name}")
-            print(f"  Success: Upgraded {upgraded} legacy files")
+            if single_file:
+                _legacy_exts = {".doc", ".xls", ".ppt", ".rtf", ".odt"}
+                upgraded = 0
+                if safe_is_file(current) and current.suffix.lower() in _legacy_exts:
+                    new_path = self.office_handler.upgrade_office_file(current, self._unique_path)
+                    if new_path != current:
+                        upgraded = 1
+                        print(f"  Success: Upgraded file: {current.name} → {new_path.name}")
+                        current = new_path
+                print(f"  Success: Upgraded {upgraded} legacy files")
+            else:
+                legacy = [
+                    p
+                    for p in self.root_path.rglob("*")
+                    if safe_is_file(p)
+                    and p.suffix.lower() in {".doc", ".xls", ".ppt", ".rtf", ".odt"}
+                ]
+                upgraded = 0
+                for p in legacy:
+                    new_path = self.office_handler.upgrade_office_file(p, self._unique_path)
+                    if new_path != p:
+                        upgraded += 1
+                        print(f"  Success: Upgraded file: {p.name} → {new_path.name}")
+                print(f"  Success: Upgraded {upgraded} legacy files")
+
         if not self.rename_only and not self.upgrade_only:
             print("\nPASS 3: Content...")
-            files = [
-                p for p in self.root_path.rglob("*")
-                if safe_is_file(p) and not p.name.startswith(".")
-            ]
+            if single_file:
+                files = [current] if safe_is_file(current) else []
+            else:
+                files = [
+                    p for p in self.root_path.rglob("*")
+                    if safe_is_file(p) and not p.name.startswith(".")
+                ]
             try:
                 from tqdm import tqdm as _tqdm
                 _tqdm_available = True
