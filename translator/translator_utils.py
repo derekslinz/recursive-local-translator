@@ -211,3 +211,23 @@ def move_path(src: Path, dst: Path) -> None:
             shutil.move(str(src), str(dst))
         else:
             raise
+
+
+def read_text_detected(path: Path) -> str:
+    """Read a text file with automatic encoding detection."""
+    raw = path.read_bytes()
+    # Fast path: valid UTF-8
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        pass
+    # charset-normalizer (pip install charset-normalizer — often already installed)
+    try:
+        from charset_normalizer import from_bytes as _cn_from_bytes
+        result = _cn_from_bytes(raw).best()
+        if result is not None:
+            return str(result)
+    except ImportError:
+        pass
+    # Last resort: latin-1 never raises
+    return raw.decode("latin-1")

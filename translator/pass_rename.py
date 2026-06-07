@@ -14,13 +14,22 @@ from .translator_utils import (
 
 class RenameProcessor:
     def __init__(
-        self, client, lock, unique_path_func, auto_detect=False, target_lang="en"
+        self,
+        client,
+        lock,
+        unique_path_func,
+        auto_detect=False,
+        target_lang="en",
+        dry_run=False,
+        rename_log_callback=None,
     ):
         self.client = client
         self.lock = lock
         self.unique_path_func = unique_path_func
         self.auto_detect = auto_detect
         self.target_lang = target_lang
+        self.dry_run = dry_run
+        self.rename_log_callback = rename_log_callback
 
     def _should_translate(self, text: str) -> bool:
         if not text:
@@ -99,10 +108,15 @@ class RenameProcessor:
             new_name = self.translate_filename(f.name)
             if new_name != f.name:
                 target = self.unique_path_func(current / new_name)
-                stats_callback("files_renamed")
-                move_path(f, target)
-                print(f"  Success: Renamed file: {f.name} → {target.name}")
-                stats_callback("items_moved")
+                if self.dry_run:
+                    print(f"  Would rename: {f.name} → {target.name}")
+                else:
+                    stats_callback("files_renamed")
+                    move_path(f, target)
+                    print(f"  Success: Renamed file: {f.name} → {target.name}")
+                    stats_callback("items_moved")
+                    if self.rename_log_callback:
+                        self.rename_log_callback(f, target)
         for d in (p for p in items if safe_is_dir(p)):
             if d.name.startswith("."):
                 continue
@@ -112,6 +126,10 @@ class RenameProcessor:
                 else d.name
             )
             if translated == d.name:
+                self.process_dirs_recursive(d, stats_callback)
+                continue
+            if self.dry_run:
+                print(f"  Would rename dir: {d.name} → {translated}")
                 self.process_dirs_recursive(d, stats_callback)
                 continue
             new_path = d.parent / translated

@@ -14,7 +14,9 @@ from .translator_utils import (
     safe_exists,
     safe_is_file,
     detect_language,
+    read_text_detected,
 )
+from .translation_log import TranslationLog
 from .handlers_text import TextHandler
 from .handlers_office import OfficeHandler
 from .handlers_media import MediaHandler
@@ -47,6 +49,10 @@ class WorkspaceRUENTranslator:
         self.workers = kwargs.get("workers", 5)
         self.skip_translated = kwargs.get("skip_translated", False)
         self.only_extensions: set = kwargs.get("only_extensions") or set()
+        self.dry_run: bool = kwargs.get("dry_run", False)
+        self.max_file_size: int = kwargs.get("max_file_size", 0)
+        _log_file = kwargs.get("log_file")
+        self._log: Optional[TranslationLog] = TranslationLog(_log_file) if _log_file and not self.dry_run else None
         self.translate_extract_sidecars = kwargs.get("translate_extract_sidecars", True)
         self.text_extensions = {
             ".txt",
@@ -103,6 +109,8 @@ class WorkspaceRUENTranslator:
             self._unique_path,
             auto_detect=self.auto_detect,
             target_lang=self.target_lang,
+            dry_run=self.dry_run,
+            rename_log_callback=self._log_rename,
         )
 
         self.stats = {
@@ -123,6 +131,18 @@ class WorkspaceRUENTranslator:
     def _stats_inc(self, key):
         with self._lock:
             self.stats[key] += 1
+
+    def _log_rename(self, old: Path, new: Path) -> None:
+        if self._log:
+            self._log.log_rename(old, new)
+
+    def _log_content(self, path: Path, kind: str) -> None:
+        if self._log:
+            self._log.log_content(path, kind)
+
+    def _log_sidecar(self, source: Path, sidecar: Path) -> None:
+        if self._log:
+            self._log.log_sidecar(source, sidecar)
 
     def _print_stats(self) -> None:
         labels = {
@@ -203,9 +223,7 @@ class WorkspaceRUENTranslator:
         suf = path.suffix.lower()
         try:
             if suf in self.text_extensions:
-                for line in path.read_text(
-                    encoding="utf-8", errors="ignore"
-                ).splitlines():
+                for line in read_text_detected(path).splitlines():
                     if line.strip():
                         return line.strip()
             if suf in {".csv", ".tsv"}:
@@ -304,6 +322,19 @@ class WorkspaceRUENTranslator:
         if self.only_extensions and path.suffix.lower() not in self.only_extensions:
             return
 
+        if self.max_file_size:
+            try:
+                if path.stat().st_size > self.max_file_size:
+                    return
+            except OSError:
+                pass
+
+        if self.dry_run:
+            snippet = self._get_content_snippet(path)
+            if snippet and is_russian(snippet):
+                print(f"  Would translate ({path.suffix.lstrip('.')}): {path.name}")
+            return
+
         # Handle autodetection
         if self.auto_detect:
             snippet = self._get_content_snippet(path)
@@ -348,6 +379,7 @@ class WorkspaceRUENTranslator:
             return
         if ok:
             self._stats_inc("files_content_translated")
+            self._log_content(path, t)
             print(f"  Success: Content translated ({t}): {path.name}")
             self._maybe_rename_via_content(path)
             if self.skip_translated:
@@ -365,6 +397,17 @@ class WorkspaceRUENTranslator:
                 stat = path.stat()
                 if self.client.is_file_translated(str(path), stat.st_mtime, stat.st_size):
                     self._stats_inc("sidecars_skipped")
+                    return
+            except OSError:
+                pass
+
+        if self.dry_run:
+            print(f"  Would extract sidecar: {path.name}")
+            return
+
+        if self.max_file_size:
+            try:
+                if path.stat().st_size > self.max_file_size:
                     return
             except OSError:
                 pass
@@ -389,6 +432,7 @@ class WorkspaceRUENTranslator:
                 if not safe_exists(sidecar):
                     sidecar.write_text(trans, encoding="utf-8")
                     self._stats_inc("sidecars_written")
+                    self._log_sidecar(path, sidecar)
                     self._stats_inc("files_content_translated")
                     print(f"  Success: Sidecar written: {path.name}.en.txt")
                     if self.skip_translated:
@@ -418,11 +462,15 @@ class WorkspaceRUENTranslator:
                     new_name = self.rename_proc.translate_filename(p.name)
                     if new_name != p.name:
                         target = self._unique_path(p.parent / new_name)
-                        move_path(p, target)
-                        self._stats_inc("files_renamed")
-                        self._stats_inc("items_moved")
-                        print(f"  Success: Renamed file: {p.name} → {target.name}")
-                        current = target
+                        if self.dry_run:
+                            print(f"  Would rename: {p.name} → {target.name}")
+                        else:
+                            move_path(p, target)
+                            self._stats_inc("files_renamed")
+                            self._stats_inc("items_moved")
+                            print(f"  Success: Renamed file: {p.name} → {target.name}")
+                            current = target
+                            self._log_rename(p, current)
             else:
                 self.rename_proc.process_dirs_recursive(self.root_path, self._stats_inc)
 
@@ -432,11 +480,15 @@ class WorkspaceRUENTranslator:
                 _legacy_exts = {".doc", ".xls", ".ppt", ".rtf", ".odt"}
                 upgraded = 0
                 if safe_is_file(current) and current.suffix.lower() in _legacy_exts:
-                    new_path = self.office_handler.upgrade_office_file(current, self._unique_path)
-                    if new_path != current:
+                    if self.dry_run:
+                        print(f"  Would upgrade: {current.name}")
                         upgraded = 1
-                        print(f"  Success: Upgraded file: {current.name} → {new_path.name}")
-                        current = new_path
+                    else:
+                        new_path = self.office_handler.upgrade_office_file(current, self._unique_path)
+                        if new_path != current:
+                            upgraded = 1
+                            print(f"  Success: Upgraded file: {current.name} → {new_path.name}")
+                            current = new_path
                 print(f"  Success: Upgraded {upgraded} legacy files")
             else:
                 legacy = [
@@ -445,12 +497,17 @@ class WorkspaceRUENTranslator:
                     if safe_is_file(p)
                     and p.suffix.lower() in {".doc", ".xls", ".ppt", ".rtf", ".odt"}
                 ]
-                upgraded = 0
-                for p in legacy:
-                    new_path = self.office_handler.upgrade_office_file(p, self._unique_path)
-                    if new_path != p:
-                        upgraded += 1
-                        print(f"  Success: Upgraded file: {p.name} → {new_path.name}")
+                if self.dry_run:
+                    for p in legacy:
+                        print(f"  Would upgrade: {p.name}")
+                    upgraded = len(legacy)
+                else:
+                    upgraded = 0
+                    for p in legacy:
+                        new_path = self.office_handler.upgrade_office_file(p, self._unique_path)
+                        if new_path != p:
+                            upgraded += 1
+                            print(f"  Success: Upgraded file: {p.name} → {new_path.name}")
                 print(f"  Success: Upgraded {upgraded} legacy files")
 
         if not self.rename_only and not self.upgrade_only:
@@ -493,3 +550,5 @@ class WorkspaceRUENTranslator:
                 builtins.print = _orig_print
         self._print_stats()
         print("\n" + "=" * 70 + f"\nDONE in {time.time() - t0:.2f}s\n" + "=" * 70)
+        if self._log:
+            self._log.close()

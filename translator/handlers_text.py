@@ -1,8 +1,10 @@
 import csv
+import io
 import json
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from .handlers_base import BaseHandler
+from .translator_utils import read_text_detected
 
 try:
     from lxml import etree as _lxml_etree
@@ -14,7 +16,7 @@ except ImportError:
 class TextHandler(BaseHandler):
     def translate_text_inplace(self, path: Path) -> bool:
         try:
-            content = path.read_text(encoding="utf-8", errors="ignore")
+            content = read_text_detected(path)
         except Exception as e:
             print(f"  Warning: Read error: {path}: {e}")
             return False
@@ -36,25 +38,25 @@ class TextHandler(BaseHandler):
         changed = False
 
         try:
-            with path.open("r", encoding="utf-8", errors="ignore", newline="") as fh:
-                sample = fh.read(4096)
-                fh.seek(0)
-                if sample.strip():
-                    try:
-                        dialect = csv.Sniffer().sniff(sample)
-                    except csv.Error:
-                        pass
-                reader = csv.reader(fh, dialect)
-                for row in reader:
-                    new_row = []
-                    for cell in row:
-                        translation = self.translate_text_if_russian(cell)
-                        if translation is not None and translation != cell:
-                            new_row.append(translation)
-                            changed = True
-                        else:
-                            new_row.append(cell)
-                    rows.append(new_row)
+            text = read_text_detected(path)
+            fh = io.StringIO(text, newline="")
+            sample = text[:4096]
+            if sample.strip():
+                try:
+                    dialect = csv.Sniffer().sniff(sample)
+                except csv.Error:
+                    pass
+            reader = csv.reader(fh, dialect)
+            for row in reader:
+                new_row = []
+                for cell in row:
+                    translation = self.translate_text_if_russian(cell)
+                    if translation is not None and translation != cell:
+                        new_row.append(translation)
+                        changed = True
+                    else:
+                        new_row.append(cell)
+                rows.append(new_row)
         except Exception as e:
             print(f"  Warning: CSV read error: {path}: {e}")
             return False
@@ -73,7 +75,7 @@ class TextHandler(BaseHandler):
 
     def translate_json_inplace(self, path: Path) -> bool:
         try:
-            content = path.read_text(encoding="utf-8", errors="ignore")
+            content = read_text_detected(path)
             data = json.loads(content)
         except Exception as e:
             print(f"  Warning: JSON parse error: {path}: {e}")

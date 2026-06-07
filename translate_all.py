@@ -138,6 +138,25 @@ Examples:
         action="store_true",
         help="Reprocess all files even if already translated (overrides auto-resume when cache DB exists)",
     )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Preview renames and content changes without writing any files",
+    )
+    parser.add_argument(
+        "--log-file",
+        type=str,
+        default=None,
+        metavar="PATH",
+        help="Write a JSONL audit log of all renames and translations to PATH",
+    )
+    parser.add_argument(
+        "--max-file-size",
+        type=int,
+        default=0,
+        metavar="BYTES",
+        help="Skip files larger than BYTES in PASS 3 (0 = no limit; e.g. 10485760 for 10 MB)",
+    )
 
     args = parser.parse_args()
 
@@ -175,6 +194,9 @@ Examples:
             skip_translated=skip_translated,
             glossary=glossary,
             only_extensions=only_extensions,
+            dry_run=args.dry_run,
+            log_file=args.log_file,
+            max_file_size=args.max_file_size,
         )
         tr.run()
     except KeyboardInterrupt:
